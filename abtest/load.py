@@ -14,7 +14,7 @@ COLUMNS = ["experiment_id", "variant_id", "metric_id", "time_since_start",
 
 
 def read_raw(path: Path | None = None) -> pd.DataFrame:
-    """The source table, unchanged apart from column types.
+    """The source table, unchanged apart from column types and day rounding.
 
     One row = one experiment x treatment arm x metric x snapshot time, holding
     the user count, mean and variance of the control group (`_c`) and of that
@@ -24,6 +24,13 @@ def read_raw(path: Path | None = None) -> pd.DataFrame:
     if list(df.columns) != COLUMNS:
         raise ValueError(f"unexpected columns: {list(df.columns)}")
     df["experiment_id"] = df["experiment_id"].astype(object)
+    # Days are stored as doubles with rounding noise (3.0000000000000004).
+    # Every value is a whole number of half-days, so snap to that grid; without
+    # this a test ending on day 7 could be read as ending just after it.
+    half_days = (df["time_since_start"] * 2).round()
+    if ((df["time_since_start"] * 2 - half_days).abs() > 1e-6).any():
+        raise ValueError("time_since_start is not on a half-day grid")
+    df["time_since_start"] = half_days / 2
     return df
 
 
