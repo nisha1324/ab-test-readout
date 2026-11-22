@@ -1,0 +1,14 @@
+check_name,rule,violations
+arms_without_four_metrics,every arm reports metrics 1 to 4,0
+binary_metric_out_of_range,metric 1 is a share between 0 and 1,0
+binary_variance_mismatch,metric 1 variance equals mean x (1 - mean),0
+control_differs_between_arms,arms of one experiment are compared with the same control group,0
+duplicate_keys,"experiment, arm, metric and time identify a row",0
+empty_groups,both groups have at least one user,8
+missing_means,every row has both means,0
+negative_means,no metric is negative on average,0
+non_integer_user_counts,user counts are whole numbers,0
+rows_missing_variance,every row has both variances,779
+snapshots_missing_a_metric,every snapshot of an arm reports all four metrics,1
+user_count_falls,cumulative user counts never fall from one snapshot to the next,2
+user_counts_differ_by_metric,the four metrics of a snapshot share one pair of user counts,0
