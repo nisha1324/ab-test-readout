@@ -1,0 +1,5 @@
+first_decision_day,tests,significant_at_end,peek_stops,peek_not_significant_at_end,peek_confirmed_stops,peek_confirmed_not_significant_at_end,always_stops,always_not_significant_at_end,always_confirmed_stops,always_confirmed_not_significant_at_end
+7,265,78,148,70,118,45,83,26,59,11
+14,265,78,137,59,108,35,75,21,55,9
+21,265,78,123,45,98,25,72,18,54,8
+28,265,78,115,37,94,21,68,14,49,5
