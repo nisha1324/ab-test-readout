@@ -83,8 +83,8 @@ def test_charts_and_links_exist():
 
 
 def test_status_line():
-    assert "**Status: Part 2 of 4 done**" in README
-    assert README.count("~~") == 4      # two roadmap steps struck out
+    assert "**Status: Part 3 of 4 done**" in README
+    assert README.count("~~") == 6      # three roadmap steps struck out
 
 
 # ------------------------------------------------------------ Part 2
@@ -144,3 +144,79 @@ def test_part2_statements_in_words(q):
                 "sql/final_snapshot.sql", "abtest/readout.py", "scripts/readout_report.py"):
         root = Path(__file__).resolve().parents[1]
         assert rel.split("/")[-1] in README and (root / rel).exists(), rel
+
+
+# ------------------------------------------------------------ Part 3
+@pytest.fixture(scope="module")
+def k():
+    from scripts import peeking_report as K
+    b3 = K.build()
+    return K, b3, K.facts(b3)
+
+
+def part3_statements(K, f):
+    P = K.P
+    r = f["rules"]
+    pk, av, avc = r["peek"], r["always"], r["always_confirmed"]
+    mn = f["minimum"].set_index("first_decision_day")
+    return [
+        f"replays {f['arms']} of the {f['arms_part2']} arms ({f['tests']} tests)",
+        f"the other {f['arms_skipped']} arms have an incomplete daily record",
+        f"No rule may stop a test before day {P.FIRST_DECISION_DAY:g}",
+        f"**Calling a result at the first daily look with p < {P.ALPHA} gives one in {100 * pk['null_mean']:.1f}%**",
+        f"({100 * pk['null_min']:.1f}% to {100 * pk['null_max']:.1f}% depending on the arm)",
+        f"{100 * f['curve'][10]:.1f}% for 10 looks and {100 * f['curve'][100]:.1f}% for 100",
+        f"is {1 / P.ALPHA:.0f} times the evidence",
+        f"Its simulated false-alarm rate here is {100 * av['null_mean']:.1f}%, and {100 * avc['null_mean']:.1f}% when",
+        f"**{f['sig_end']} of the {f['tests']} tests are significant at the end. Daily peeking would have called {pk['stops']}**, "
+        f"and {pk['not_sig_end']} of those are not significant when the test ends",
+        f"peeking would be expected to call about {pk['expected_null']:.0f}",
+        f"{f['arms_any_peek']} of {f['arms']} arms show a \"significant\" metric on some day, against {f['arms_any_end']} at the end",
+        f"For the {pk['sig_end']} tests that end significant, the change on the day peeking called it was larger than "
+        f"the final one in {pk['larger_at_stop']}, by a median factor of {pk['overstatement']:.2f}",
+        f"calls {avc['stops']} results:** {avc['sig_end']} of the {f['sig_end']} that end significant and {avc['not_sig_end']} that do not",
+        f"For those {avc['sig_end']} it decides on a median of day {avc['stop_day_median']:g} of a test that ran "
+        f"{avc['last_day_median']:g} days, {avc['days_saved_median']:g} days sooner",
+        f"It misses {f['missed']} tests that end significant",
+        f"{f['bound_min']:.2f} standard errors or more at every look in these tests, against {f['z_crit']:.2f} for a single test",
+        f"**{f['blips']} blips**",
+        f"jumps by more than {P.BLIP_Z:g} standard errors and jumps back within three looks",
+        f"{f['blips_by_metric'][2]} of the {f['blips']} are in metric 2",
+        f"the simulation has {f['sim_blip_looks']} such looks in {f['sim_looks'] / 1e6:.1f} million, "
+        f"the real tests {f['blip_looks']} in {f['looks_total']:,}",
+        f"{av['on_blip']} of the {av['stops']} always-valid results were called inside a blip",
+        f"{avc['on_blip']} of the {avc['stops']} confirmed results were still called inside a longer one",
+        f"**{avc['not_sig_end'] - f['fading_on_blip']} results passed the confirmed rule with no fault marked and are "
+        f"not significant at the end**, where chance would give about {avc['expected_null']:.0f} in all {f['tests']} tests",
+        f"Here it would have called {pk['stops']} results where {f['sig_end']} held to the end",
+        f"It found {avc['sig_end']} of the {f['sig_end']} results that held, a median of {avc['days_saved_median']:g} days early, "
+        f"with a simulated false-alarm rate of {100 * avc['null_mean']:.1f}%",
+        f"With no decision before day 28 the confirmed rule calls {mn.loc[28.0, 'always_confirmed_stops']} results and "
+        f"{mn.loc[28.0, 'always_confirmed_not_significant_at_end']} do not last, against {avc['stops']} and {avc['not_sig_end']} from day 7",
+        f"(a median factor of {avc['overstatement']:.2f} for the confirmed rule)",
+        f"(more than {P.BLIP_Z:g} standard errors there and back, within {P.MAX_BLIP_LOOKS} looks)",
+        f"only run on the {f['tests']} tests replayed",
+    ]
+
+
+def test_every_part3_figure_matches_the_results(k):
+    K, _, f = k
+    missing = [s for s in part3_statements(K, f) if s not in README]
+    assert not missing, missing
+
+
+def test_part3_statements_in_words(k):
+    K, b3, f = k
+    jump = f["end_jumps"].iloc[0]
+    assert len(f["end_jumps"]) == 1
+    assert f"One Part 2 result (`{jump.experiment_id}` / {jump.variant_id}, metric {jump.metric_id})" in README
+    assert K.P.MAX_BLIP_LOOKS == 3 and "within three looks" in README
+    assert f["rules"]["always_confirmed"]["null_mean"] < f["rules"]["always"]["null_mean"] < K.P.ALPHA
+    root = Path(__file__).resolve().parents[1]
+    for rel in ("results/PEEKING.md", "results/peeking.csv", "results/charts/07_false_alarms_by_looks.png",
+                "results/charts/08_three_tests.png", "results/charts/09_results_by_rule.png",
+                "sql/daily_looks.sql", "abtest/peeking.py", "scripts/peeking_report.py"):
+        assert rel.split("/")[-1] in README and (root / rel).exists(), rel
+    ci = (root / ".github" / "workflows" / "ci.yml").read_text()
+    for script in ("data_checks_report.py", "readout_report.py", "peeking_report.py"):
+        assert f"python scripts/{script}" in ci and f"python scripts/{script}" in README

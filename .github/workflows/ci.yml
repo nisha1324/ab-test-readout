@@ -31,12 +31,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-lock.txt
 
-      # Rerun both reports from the committed source file (no download).
+      # Rerun the three reports from the committed source file (no download).
+      # The Part 3 simulation is seeded, so its figures are reproducible too.
       # Fail and show the difference if any committed file changes.
       - name: Rebuild the reports, check nothing changed
         run: |
           python scripts/data_checks_report.py
           python scripts/readout_report.py
+          python scripts/peeking_report.py
           git status --porcelain
           test -z "$(git status --porcelain)" || { git diff --stat; git diff -- "*.md" "*.csv" | head -200; exit 1; }
 
