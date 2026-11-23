@@ -31,11 +31,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-lock.txt
 
-      # Rerun the report from the committed source file (no download).
+      # Rerun both reports from the committed source file (no download).
       # Fail and show the difference if any committed file changes.
-      - name: Rebuild the report, check nothing changed
+      - name: Rebuild the reports, check nothing changed
         run: |
           python scripts/data_checks_report.py
+          python scripts/readout_report.py
           git status --porcelain
           test -z "$(git status --porcelain)" || { git diff --stat; git diff -- "*.md" "*.csv" | head -200; exit 1; }
 

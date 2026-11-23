@@ -83,5 +83,64 @@ def test_charts_and_links_exist():
 
 
 def test_status_line():
-    assert "**Status: Part 1 of 4 done**" in README
-    assert README.count("~~") == 2      # one roadmap step struck out
+    assert "**Status: Part 2 of 4 done**" in README
+    assert README.count("~~") == 4      # two roadmap steps struck out
+
+
+# ------------------------------------------------------------ Part 2
+@pytest.fixture(scope="module")
+def q():
+    from scripts import readout_report as Q
+    b2 = Q.build()
+    return Q, b2, Q.facts(b2)
+
+
+def part2_statements(Q, f):
+    A = Q.R
+    return [
+        f"the {f['arms_not_decided']} arms with an unexplained split or under a week of data are not decided on",
+        f"{f['arms_warned']} arms are read with a warning",
+        f"**{f['tests']} tests in {f['arms_read']} arms**",
+        f"**{f['significant']} of {f['tests']} tests ({100 * f['significant'] / f['tests']:.0f}%) are significant at p < {A.ALPHA}.**",
+        f"about {f['expected_by_chance']:.0f} would be",
+        f"The median significant change is {100 * f['sig_abs_median']:.2f}% of the control mean and the largest is {100 * f['sig_abs_max']:.2f}%",
+        f"{f['sig_under_reference']} of the {f['significant']} are under 1%",
+        f"higher in {f['up']} of the significant tests and lower in {f['down']}",
+        f"**{f['can_detect']} of the {f['tests']} tests could detect it** {100 * A.POWER:.0f}% of the time",
+        f"The most sensitive could detect {100 * f['mde_min']:.2f}%, the least sensitive only {100 * f['mde_max']:.1f}%",
+        f"about {round(f['need'][1], -3):,} users per group to detect a 1% change in metric 1 and about {round(f['need'][4], -3):,} for metric 4",
+        f"Of the {f['quiet']} quiet tests, {f['quiet_inside']} have a confidence interval entirely between −1% and +1%",
+        f"The other {f['quiet_open']} are too wide",
+        f"up to {100 * f['false_alarm_4']:.1f}% per arm, not 5%",
+        f"**{f['arms_any']} of {f['arms_read']} arms ({100 * f['arms_any'] / f['arms_read']:.0f}%) have at least one significant metric.**",
+        f"**{f['arms_any_holm']} arms** do, and {f['holm']} of the {f['significant']} significant tests survive. The other {f['significant'] - f['holm']} are unconfirmed",
+        f"{f['arms_all']} arms are significant on every metric they report",
+        f"None of the {f['warned_significant']} significant tests in arms read with a warning survives",
+        f"The median significant change here is {100 * f['sig_abs_median']:.2f}%.",
+        f"roughly {f['need'][1] / 1e6:.1f} to {f['need'][4] / 1e6:.1f} million users per group",
+        f"would call {f['arms_any']} of {f['arms_read']} arms a result; after correction {f['arms_any_holm']} are",
+        f"{f['quiet_inside']} of {f['quiet']} quiet results are tight enough",
+        f"The other {f['quiet_open']} say only that the test was too small",
+        f"leaves {f['up']} changes up and {f['down']} down",
+        f"at the {100 * A.ALPHA:.0f}% level with {100 * A.POWER:.0f}% power and a {100 * A.REFERENCE_LIFT:.0f}% reference change",
+    ]
+
+
+def test_every_part2_figure_matches_the_results(q):
+    Q, _, f = q
+    missing = [s for s in part2_statements(Q, f) if s not in README]
+    assert not missing, missing
+
+
+def test_part2_statements_in_words(q):
+    Q, b2, f = q
+    rd = Q.read_rows(b2["table"])
+    assert f["arms_mixed_direction"] == 0
+    assert "No arm has one metric significantly higher and another significantly lower." in README
+    assert (rd[rd.reading == "read with warning"].p_holm < Q.R.ALPHA).sum() == 0
+    assert f["z_corr_min"] > 0.5 and "here they move together" in README
+    for rel in ("results/READOUT.md", "results/readout.csv", "results/charts/04_effects.png",
+                "results/charts/05_detectable_change.png", "results/charts/06_p_values.png",
+                "sql/final_snapshot.sql", "abtest/readout.py", "scripts/readout_report.py"):
+        root = Path(__file__).resolve().parents[1]
+        assert rel.split("/")[-1] in README and (root / rel).exists(), rel
