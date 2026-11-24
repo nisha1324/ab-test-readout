@@ -83,8 +83,9 @@ def test_charts_and_links_exist():
 
 
 def test_status_line():
-    assert "**Status: Part 3 of 4 done**" in README
-    assert README.count("~~") == 6      # three roadmap steps struck out
+    assert "**Status: all four parts done**" in README
+    assert README.count("~~") == 8      # four roadmap steps struck out
+    assert "5. A one-page summary of the whole project" in README   # the step still open
 
 
 # ------------------------------------------------------------ Part 2
@@ -220,3 +221,83 @@ def test_part3_statements_in_words(k):
     ci = (root / ".github" / "workflows" / "ci.yml").read_text()
     for script in ("data_checks_report.py", "readout_report.py", "peeking_report.py"):
         assert f"python scripts/{script}" in ci and f"python scripts/{script}" in README
+
+
+@pytest.fixture(scope="module")
+def d():
+    from scripts import decision_report as Q
+    b4 = Q.build()
+    return Q, b4, Q.facts(b4)
+
+
+def part4_statements(Q, f):
+    D = Q.D
+    up, dn, fn, g, lc, e = f["up"], f["down"], f["funnel"], f["guards"], f["launch_check"], f["ends"]
+    c = f["cases"]
+    pr = {k: c[k]["metrics"].loc[D.PRIMARY] for k in Q.CASES}
+    name = {k: f"`{c[k]['row'].experiment_id}` / {c[k]['row'].variant_id}" for k in Q.CASES}
+    split = c["split"]
+    return [
+        f"(here metric {D.PRIMARY}, a working choice)",
+        f"rules out a loss of {100 * D.MARGIN:g}% or more",
+        f"**{up['launch']} of the {f['arms']} treatments pass every rule for a launch** if higher is better "
+        f"({dn['launch']} if lower is better)",
+        f"{up['do not launch']} are \"do not launch\", {up['no change']} \"no change\", {up['run longer']} \"run longer\", "
+        f"{up['check the data']} \"check the data\" and {up['no decision']} \"no decision\"",
+        f"{fn['naive']} arms end with the primary significantly higher and {fn['launch']} are launches",
+        f"would pick {f['any_metric_up']}.",
+        f"{g['flat_with_worse']} arms have a primary that is not significantly different and a guard rail that is "
+        f"significantly worse. In {g['flat_with_worse_primary_no_change']} of them the primary alone reads \"no change\"",
+        f"**{lc['confirmed']} of the {lc['replayed']} launches that have a complete daily record also pass",
+        f"The other {lc['not_confirmed']} are launches only if",
+        f"{f['same_both_directions']} of the {f['arms']} verdicts are the same either way; all {f['launch_flips']} launches "
+        f"become \"do not launch\" if lower is better",
+        f"Of the {f['decided_arms']} arms that get a verdict on the metrics, {f['same_any_primary_decided']} get the same one",
+        f"{f['launch_any_primary']} arms are a launch under at least one choice and {f['launch_every_primary']} under every choice",
+        f"run here on all {e['tests']} tests, finds {e['jumps']}:",
+        f"| {name['clear']} | **Launch.** Primary up {100 * pr['clear'].lift:.2f}%",
+        f"| {name['thin']} | **Launch only if the end date was planned.** Primary up {100 * pr['thin'].lift:.2f}% "
+        f"with p = {pr['thin'].p:.3f}",
+        f"| {name['guard']} | **Do not launch.** Primary flat, two guard rails significantly lower",
+        f"| {name['jump']} | **Check the data.**",
+        f"| {name['flat']} | **No change.** {c['flat']['arm'].users / 1e6:.0f} million users rule out a change of "
+        f"{100 * D.MARGIN:g}% either way",
+        f"| {name['wide']} | **Cannot tell.** Could only detect a {100 * pr['wide'].mde:.1f}% change; a "
+        f"{100 * D.MARGIN:g}% change would need about {c['wide']['days_needed']:.0f} days",
+        f"| {name['split']} | **Check the data.** Primary up {100 * pr['split'].lift:.2f}%, but the treatment group is "
+        f"{100 * split['users_gap'] / split['arm'].users_t:.2f}% short of users",
+        f"the direction changes {f['arms'] - f['same_both_directions']} of {f['arms']}, the choice of primary "
+        f"{f['decided_arms'] - f['same_any_primary_decided']} of {f['decided_arms']}",
+        f"Half of the {up['do not launch']} \"do not launch\" verdicts",
+        f"{up['no change']} tests rule out a change of {100 * D.MARGIN:g}%, which closes the idea. {up['run longer']} cannot tell",
+        f"{lc['not_confirmed']} of the launches here depend on which it was",
+        f"Part 4's primary (metric {D.PRIMARY}), the {100 * D.MARGIN:g}% margin and the direction are working choices",
+        f"uncorrected p < {D.ALPHA}, three per arm",
+    ]
+
+
+def test_every_part4_figure_matches_the_results(d):
+    Q, _, f = d
+    missing = [s for s in part4_statements(Q, f) if s not in README]
+    assert not missing, missing
+
+
+def test_part4_statements_in_words(d):
+    Q, b4, f = d
+    g, up, c = f["guards"], f["up"], f["cases"]
+    assert 2 * g["flat_with_worse"] == up["do not launch"]                     # "Half of the 20"
+    assert g["better_with_worse"] == 0 and f["funnel"]["guard"] == 0           # "never stopped a launch"
+    assert sorted(m for m, s in c["guard"]["states"].items() if s == "worse").__len__() == 2
+    assert c["guard"]["row"].primary_state == "no change"                      # "Primary flat"
+    assert (c["clear"]["metrics"]["lift"].drop(index=Q.D.PRIMARY) > 0).all()   # "guard rails up too"
+    assert c["clear"]["arm"].cautions == ""                                    # "clean test"
+    assert not c["thin"]["av"].always_confirmed_stops                          # "never confirmed under daily looks"
+    assert c["jump"]["row"].end_jump_metrics != ""
+    assert len(Q.CASES) == 7 and "seven treatments" in README
+    root = Path(__file__).resolve().parents[1]
+    for rel in ("results/DECISION_MEMO.md", "results/decisions.csv", "results/charts/10_verdicts.png",
+                "results/charts/11_memo_cases.png", "abtest/decision.py", "scripts/decision_report.py"):
+        assert rel.split("/")[-1] in README and (root / rel).exists(), rel
+    ci = (root / ".github" / "workflows" / "ci.yml").read_text()
+    assert "python scripts/decision_report.py" in ci and "python scripts/decision_report.py" in README
+    assert "all four reports" in README and "four reports" in ci

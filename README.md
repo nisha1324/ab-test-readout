@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/nisha1324/ab-test-readout/actions/workflows/ci.yml/badge.svg)](https://github.com/nisha1324/ab-test-readout/actions/workflows/ci.yml)
 
-**Status: Part 3 of 4 done** (data checks, the readout and the cost of peeking). The decision memo is next; see the [roadmap](#roadmap).
+**Status: all four parts done** (data checks, the readout, the cost of peeking and the decision memo). A short summary of the whole project is the last step; see the [roadmap](#roadmap).
 
 A product team runs an A/B test and asks one question: *do we launch?* A good answer needs more than a p-value. It needs to know whether the test can be trusted, whether it was big enough to see the change that matters, whether anything else got worse, and what happens if people look at the results every day and stop when they like what they see.
 
-This project works through those steps on 78 real experiments from an online fashion retailer, and ends with a written go / no-go memo. It is statistics and SQL, not machine learning.
+This project works through those steps on 78 real experiments from an online fashion retailer, and ends with a written [go / no-go memo](results/DECISION_MEMO.md). It is statistics and SQL, not machine learning.
 
 ## The data
 
@@ -141,12 +141,52 @@ Part 2 read each test once, at the end. Real teams look at the dashboard every d
 4. **Set a minimum run for the business, not only for the statistics.** With no decision before day 28 the confirmed rule calls 49 results and 5 do not last, against 59 and 11 from day 7. A decision about a permanent change needs a test long enough to see whether the change lasts.
 5. **Re-read the size at the end.** A result called early is overstated (a median factor of 1.35 for the confirmed rule), so a forecast built on the day-of-decision figure will disappoint.
 
+## Part 4: so, do we launch?
+
+The memo: [`results/DECISION_MEMO.md`](results/DECISION_MEMO.md). Every arm and its verdict: [`results/decisions.csv`](results/decisions.csv).
+
+Parts 1 to 3 each give a reason to doubt a result. This part turns them into one rule per treatment and writes the answer down. One metric is the *primary*, the one the test was run to move (here metric 1, a working choice); the other three are *guard rails*, which a launch must not make worse. A treatment is a **launch** only if Part 1 found nothing wrong with the test, its last snapshot does not jump (Part 3), the primary is significantly better after allowing for the number of treatments in the experiment, and every guard rail's interval rules out a loss of 1% or more. The source does not say which direction is good, so every verdict is worked out both ways.
+
+![Verdicts under both directions](results/charts/10_verdicts.png)
+
+- **13 of the 99 treatments pass every rule for a launch** if higher is better (10 if lower is better). 20 are "do not launch", 37 "no change", 8 "run longer", 7 "check the data" and 14 "no decision".
+- **"Significant" is where the decision starts.** 16 arms end with the primary significantly higher and 13 are launches. "Launch if any of the four metrics is significantly higher" would pick 20.
+- **The guard rails never stopped a launch, and still earned their place.** 10 arms have a primary that is not significantly different and a guard rail that is significantly worse. In 8 of them the primary alone reads "no change".
+- **8 of the 11 launches that have a complete daily record also pass Part 3's always-valid rule.** The other 3 are launches only if their end date was fixed in advance, which the source does not say.
+- **The direction decides the answer.** 61 of the 99 verdicts are the same either way; all 13 launches become "do not launch" if lower is better.
+- **So does the choice of primary.** Of the 78 arms that get a verdict on the metrics, 57 get the same one whichever metric is the primary. 17 arms are a launch under at least one choice and 7 under every choice.
+- Part 3's check for a suspect last snapshot, run here on all 325 tests, finds 1: the one already known.
+
+### Seven decisions, written out
+
+![The seven cases](results/charts/11_memo_cases.png)
+
+The memo writes up seven treatments, picked by rule so that each shows a different kind of answer:
+
+| Treatment | What the memo says (if higher is better) |
+| --- | --- |
+| `2c8a04` / 1 | **Launch.** Primary up 1.94%, guard rails up too, clean test |
+| `b8a409` / 1 | **Launch only if the end date was planned.** Primary up 0.39% with p = 0.043, never confirmed under daily looks |
+| `adea31` / 1 | **Do not launch.** Primary flat, two guard rails significantly lower |
+| `adea31` / 2 | **Check the data.** A strong result that rests on a last snapshot that jumped |
+| `3683df` / 1 | **No change.** 93 million users rule out a change of 1% either way |
+| `591c2c` / 1 | **Cannot tell.** Could only detect a 4.4% change; a 1% change would need about 238 days |
+| `26bd38` / 1 | **Check the data.** Primary up 0.38%, but the treatment group is 0.39% short of users |
+
+### So what does this mean for the business?
+
+1. **Write the decision rule before the test:** primary metric, direction, guard rails, margin and end date. Each is missing from this dataset and each changes verdicts: the direction changes 38 of 99, the choice of primary 21 of 78.
+2. **Read every guard rail on every test, most of all the quiet ones.** Half of the 20 "do not launch" verdicts here come from a guard rail in a test whose primary did not move.
+3. **Separate "no change" from "cannot tell".** 37 tests rule out a change of 1%, which closes the idea. 8 cannot tell, and for the smallest no realistic run would. Check what a test can detect before starting it.
+4. **Record how the test ended.** A launch read once on a planned end date and a launch that survived daily looks are different claims; 3 of the launches here depend on which it was.
+
 ## Roadmap
 
 1. ~~Data checks: structure, sample-ratio mismatch, split stability, coverage, metric definitions~~ (done)
 2. ~~The readout: effect and confidence interval per arm and metric, whether each test was big enough to see a change worth having (sample size and minimum detectable effect), and what testing four metrics at once does to the false-alarm rate~~ (done)
 3. ~~The cost of peeking: what happens to the error rate when results are checked every day, and a stopping rule that allows for it~~ (done)
-4. Decision rules with guard-rail metrics, a written go / no-go memo for a handful of experiments, and the final summary
+4. ~~Decision rules with guard-rail metrics and a written go / no-go memo for a handful of experiments~~ (done)
+5. A one-page summary of the whole project at the top of this README
 
 ## How to run it
 
@@ -158,10 +198,11 @@ python scripts/download_data.py           # optional: verify data/raw against th
 python scripts/data_checks_report.py      # Part 1: results/DATA_CHECKS.md, 3 CSVs, 3 charts
 python scripts/readout_report.py          # Part 2: results/READOUT.md, 2 CSVs, 3 charts
 python scripts/peeking_report.py          # Part 3: results/PEEKING.md, 4 CSVs, 3 charts (seeded simulation, about a minute)
+python scripts/decision_report.py         # Part 4: results/DECISION_MEMO.md, 3 CSVs, 2 charts
 pytest -q
 ```
 
-Python 3.12. `requirements.txt` has the loose version ranges; `requirements-lock.txt` pins what was used. GitHub Actions reruns all three reports on every push and fails if any committed output changes.
+Python 3.12. `requirements.txt` has the loose version ranges; `requirements-lock.txt` pins what was used. GitHub Actions reruns all four reports on every push and fails if any committed output changes.
 
 ## What is where
 
@@ -172,8 +213,9 @@ Python 3.12. `requirements.txt` has the loose version ranges; `requirements-lock
 | `abtest/checks.py` | Sample-ratio test, split-stability test and the caution rules, with every threshold in one place |
 | `abtest/readout.py` | Welch test, delta-method interval for the relative change, smallest detectable change, sample size, Holm and Benjamini-Hochberg corrections |
 | `abtest/peeking.py` | The daily replay, the always-valid rule (mixture sequential probability ratio test), the blip check and the seeded simulation of tests where nothing changed |
+| `abtest/decision.py` | The decision rules: primary and guard-rail readings, the order they are applied in, the correction across treatment arms and the last-snapshot check on every test |
 | `abtest/load.py`, `abtest/source.py` | Loading, the source URL and the pinned hash |
-| `scripts/` | `download_data.py` and the three report generators |
+| `scripts/` | `download_data.py` and the four report generators |
 | `results/` | The generated reports, CSVs and charts |
 | `tests/` | Hand-worked cases for every check and formula, the real data against independent pandas and scipy calculations, simulations checked against exact and published results, and every figure in this README against the generated results |
 
@@ -187,6 +229,8 @@ Python 3.12. `requirements.txt` has the loose version ranges; `requirements-lock
 - Part 2 reads each arm once, at its last snapshot, at the 5% level with 80% power and a 1% reference change (set in `abtest/readout.py`). If tests were stopped because of what the results showed, its p-values are too small; Part 3 measures that.
 - Part 3 uses the end-of-test reading as its yardstick, and that reading can be wrong too. Its simulation treats each user's value as fixed once counted; these metrics are cumulative, so the simulated false-alarm rates are best read as lower ends for every rule.
 - The blip rule (more than 3 standard errors there and back, within 3 looks) is a working choice made after looking at the data. It cannot judge the first or last look of a test and was only run on the 265 tests replayed.
+- Part 4's primary (metric 1), the 1% margin and the direction are working choices; the source publishes none of them. One direction is applied to all four metrics. Its verdicts are examples of how to decide and say nothing about what ASOS did or should have done.
+- Part 4 checks guard rails at an uncorrected p < 0.05, three per arm, so some "guard rail worse" verdicts are false alarms. That is the price of a low bar for bad news.
 - The metrics are not named, so no change can be called good or bad, and none can be given a money value.
 
 ## Credit
