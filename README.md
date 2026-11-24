@@ -2,11 +2,39 @@
 
 [![CI](https://github.com/nisha1324/ab-test-readout/actions/workflows/ci.yml/badge.svg)](https://github.com/nisha1324/ab-test-readout/actions/workflows/ci.yml)
 
-**Status: all four parts done** (data checks, the readout, the cost of peeking and the decision memo). A short summary of the whole project is the last step; see the [roadmap](#roadmap).
+**Status: complete.** Four parts (data checks, the readout, the cost of peeking and the decision memo), each with its own report and charts, all regenerated and tested by GitHub Actions on every push.
 
 A product team runs an A/B test and asks one question: *do we launch?* A good answer needs more than a p-value. It needs to know whether the test can be trusted, whether it was big enough to see the change that matters, whether anything else got worse, and what happens if people look at the results every day and stop when they like what they see.
 
 This project works through those steps on 78 real experiments from an online fashion retailer, and ends with a written [go / no-go memo](results/DECISION_MEMO.md). It is statistics and SQL, not machine learning.
+
+## Summary
+
+78 experiments, 99 treatment arms and four metrics per arm, taken from raw cumulative snapshots to a written verdict for every treatment. Five findings; every figure below comes from the part named beside it.
+
+- **Over a third of the treatments carry a caution before any metric is read.** 37 of 99 arms fail at least one check. Testing every split against 50/50 raises 12 alarms, but only 4 look like users going missing; the other 8 are too far from 50% to be an even test that lost a few users. 26 arms ended within a week, were first recorded late or have a hole in the record. *(Part 1)*
+- **Real changes are small, so tests have to be large.** 97 of 325 tests are significant where about 16 would be by chance, and the median significant change is 0.76% of the control mean. Detecting a 1% change takes about 639,000 users per group for metric 1 and 1,847,000 for metric 4. Of the 228 quiet tests, 189 rule out a change of 1% either way, which is an answer too. *(Part 2)*
+- **Stopping on the first good-looking day is the costliest habit.** Calling a result at the first daily look with p < 0.05 gives a false alarm in 17.6% of simulated tests where nothing changed, not 5%, and would have called 148 results where 78 held to the end. An always-valid rule, confirmed on the next look, keeps the simulated rate at 0.7% and found 48 of the 78, a median of 24 days early. *(Part 3)*
+- **Snapshots can be wrong where user counts look fine.** 50 blips, where a result jumps by more than 3 standard errors and back within three looks; 46 of them are in metric 2. One strong Part 2 result rests on a last snapshot that jumped. *(Part 3)*
+- **The decision rule decides as much as the data.** With a primary metric, three guard rails and a 1% margin, 13 of 99 treatments are a launch if higher is better; "launch if any metric is significantly higher" would pick 20. The direction changes 38 of 99 verdicts and the choice of primary 21 of 78, and 10 arms with a quiet primary are stopped by a guard rail. *(Part 4)*
+
+![Verdicts under both directions](results/charts/10_verdicts.png)
+
+### What a team should take from it
+
+Ranked by how directly the figures support them. None says whether a treatment is good for ASOS: the metrics are unnamed and the experiments anonymous.
+
+| # | Recommendation | For | Evidence |
+| ---: | --- | --- | --- |
+| 1 | **Write the decision rule down before the test starts:** the primary metric and which direction is good, the guard rails, the margin worth having, the intended split and the end date. | Product managers, experiment owners | Part 4: the direction changes 38 of 99 verdicts and the choice of primary 21 of 78. Part 2: "any of four metrics" calls 41 of 85 arms a result, 29 after correction |
+| 2 | **Check the split and the daily record before reading any metric**, against the intended split, and report how far off an alarm is, not just that it fired. | Analysts | Part 1: 12 alarms against 50/50, 8 of them too far from 50% to be an even test that lost users; a real one can sit within a tenth of a point of 50% (a treatment share of 49.935%) |
+| 3 | **Size the test for the change that matters before starting it, and report the interval.** "No change" and "cannot tell" are different answers. | Product managers, analysts | Part 2: a 1% change needs roughly 0.6 to 1.8 million users per group. Part 4: 37 treatments rule out a 1% change, 8 cannot tell |
+| 4 | **If the team looks every day, give it an always-valid rule and two looks in a row.** Otherwise fix the end date and read the test once. | Experimentation platform team | Part 3: 17.6% false alarms for daily peeking against 0.7% for the confirmed always-valid rule, which still found 48 of the 78 results that held |
+| 5 | **Read every guard rail, most of all on the quiet tests.** | Analysts, product managers | Part 4: half of the 20 "do not launch" verdicts come from a guard rail in a test whose primary did not move |
+| 6 | **Hold back any snapshot whose result jumps away from the day before.** | Data engineers | Part 3: 50 blips, 46 of them in metric 2. Part 4: one final snapshot (`adea31` / 2) is suspect, and its verdict is "check the data" |
+| 7 | **Plan on the end-of-test figure, not the figure on the day of the decision.** | Finance, forecasting | Part 3: results called early are overstated by a median factor of 1.31 under daily peeking and 1.35 under the confirmed always-valid rule |
+
+What this analysis cannot do is in [Limits](#limits). The three that matter most for a decision: the experiments are anonymous and the datasheet says they are not representative, so no verdict says anything about ASOS; the metrics are unnamed, so the primary, the direction and the 1% margin are working choices and every verdict is given both ways; and several thresholds were set after looking at the data.
 
 ## The data
 
@@ -186,7 +214,7 @@ The memo writes up seven treatments, picked by rule so that each shows a differe
 2. ~~The readout: effect and confidence interval per arm and metric, whether each test was big enough to see a change worth having (sample size and minimum detectable effect), and what testing four metrics at once does to the false-alarm rate~~ (done)
 3. ~~The cost of peeking: what happens to the error rate when results are checked every day, and a stopping rule that allows for it~~ (done)
 4. ~~Decision rules with guard-rail metrics and a written go / no-go memo for a handful of experiments~~ (done)
-5. A one-page summary of the whole project at the top of this README
+5. ~~A one-page summary of the whole project at the top of this README~~ (done)
 
 ## How to run it
 

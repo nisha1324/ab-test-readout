@@ -1,4 +1,5 @@
 """Every figure the README quotes, tied to the generated results."""
+import re
 from pathlib import Path
 
 import pytest
@@ -79,13 +80,16 @@ def test_charts_and_links_exist():
                 "sql/integrity.sql", "sql/arm_summary.sql", "sql/metric_profile.sql",
                 "abtest/checks.py", "scripts/download_data.py", "requirements-lock.txt"):
         assert rel.split("/")[-1] in README and (root / rel).exists(), rel
-    assert len(list((root / "results" / "charts").glob("*.png"))) == README.count("](results/charts/")
+    pngs = {p.name for p in (root / "results" / "charts").glob("*.png")}
+    linked = set(re.findall(r"\]\(results/charts/([^)]+\.png)\)", README))
+    assert linked == pngs                                        # every chart shown, none missing
+    assert README.count("](results/charts/") == len(pngs) + 1    # chart 10 is shown twice (summary + Part 4)
 
 
 def test_status_line():
-    assert "**Status: all four parts done**" in README
-    assert README.count("~~") == 8      # four roadmap steps struck out
-    assert "5. A one-page summary of the whole project" in README   # the step still open
+    assert "**Status: complete.**" in README and "Work in progress" not in README
+    assert README.count("~~") == 10     # all five roadmap steps struck out
+    assert "5. ~~A one-page summary of the whole project" in README
 
 
 # ------------------------------------------------------------ Part 2
@@ -301,3 +305,96 @@ def test_part4_statements_in_words(d):
     ci = (root / ".github" / "workflows" / "ci.yml").read_text()
     assert "python scripts/decision_report.py" in ci and "python scripts/decision_report.py" in README
     assert "all four reports" in README and "four reports" in ci
+
+
+# ------------------------------------------------------------ Summary
+def section(start, end):
+    return README.split(start, 1)[1].split(end, 1)[0]
+
+
+SUMMARY = section("## Summary", "## The data")
+BODY = README.split("## The data", 1)[1]
+
+
+def summary_statements(f1, f2, f3, f4, D):
+    pk, avc = f3["rules"]["peek"], f3["rules"]["always_confirmed"]
+    up = f4["up"]
+    jump = f3["end_jumps"].iloc[0]
+    return [
+        f"{f1['experiments']} experiments, {f1['arms']} treatment arms and four metrics per arm",
+        f"{f1['arms'] - f1['clean_arms']} of {f1['arms']} arms fail at least one check",
+        f"raises {f1['naive_alarms']} alarms, but only {f1['small']} look like users going missing; the other {f1['unequal']}",
+        f"{f1['coverage_caution_arms']} arms ended within a week",
+        f"{f2['significant']} of {f2['tests']} tests are significant where about {f2['expected_by_chance']:.0f} would be by chance",
+        f"the median significant change is {100 * f2['sig_abs_median']:.2f}% of the control mean",
+        f"about {round(f2['need'][1], -3):,} users per group for metric 1 and {round(f2['need'][4], -3):,} for metric 4",
+        f"Of the {f2['quiet']} quiet tests, {f2['quiet_inside']} rule out a change of 1% either way",
+        f"gives a false alarm in {100 * pk['null_mean']:.1f}% of simulated tests",
+        f"would have called {pk['stops']} results where {f3['sig_end']} held to the end",
+        f"keeps the simulated rate at {100 * avc['null_mean']:.1f}% and found {avc['sig_end']} of the {f3['sig_end']}, "
+        f"a median of {avc['days_saved_median']:g} days early",
+        f"{f3['blips']} blips, where a result jumps by more than",
+        f"{f3['blips_by_metric'][2]} of them are in metric 2",
+        f"{up['launch']} of {f4['arms']} treatments are a launch if higher is better",
+        f"would pick {f4['any_metric_up']}.",
+        f"The direction changes {f4['arms'] - f4['same_both_directions']} of {f4['arms']} verdicts and the choice of primary "
+        f"{f4['decided_arms'] - f4['same_any_primary_decided']} of {f4['decided_arms']}",
+        f"{f4['guards']['flat_with_worse']} arms with a quiet primary are stopped by a guard rail",
+        f"a {100 * D.MARGIN:g}% margin",
+        # the recommendations table
+        f"the direction changes {f4['arms'] - f4['same_both_directions']} of {f4['arms']} verdicts and the choice of primary "
+        f"{f4['decided_arms'] - f4['same_any_primary_decided']} of {f4['decided_arms']}. Part 2: \"any of four metrics\" "
+        f"calls {f2['arms_any']} of {f2['arms_read']} arms a result, {f2['arms_any_holm']} after correction",
+        f"Part 1: {f1['naive_alarms']} alarms against 50/50, {f1['unequal']} of them",
+        f"roughly {f2['need'][1] / 1e6:.1f} to {f2['need'][4] / 1e6:.1f} million users per group",
+        f"Part 4: {up['no change']} treatments rule out a {100 * D.MARGIN:g}% change, {up['run longer']} cannot tell",
+        f"{100 * pk['null_mean']:.1f}% false alarms for daily peeking against {100 * avc['null_mean']:.1f}% for the confirmed",
+        f"still found {avc['sig_end']} of the {f3['sig_end']} results that held",
+        f"half of the {up['do not launch']} \"do not launch\" verdicts",
+        f"Part 3: {f3['blips']} blips, {f3['blips_by_metric'][2]} of them in metric 2",
+        f"one final snapshot (`{jump.experiment_id}` / {jump.variant_id}) is suspect",
+        f"median factor of {pk['overstatement']:.2f} under daily peeking and {avc['overstatement']:.2f} under the confirmed",
+    ]
+
+
+@pytest.fixture(scope="module")
+def all_facts(b, f, q, k, d):
+    return f, q[2], k[2], d[2], d[0].D
+
+
+def test_every_summary_figure_matches_the_results(all_facts):
+    missing = [s for s in summary_statements(*all_facts) if s not in SUMMARY]
+    assert not missing, missing
+
+
+def test_summary_statements_in_words(all_facts, b):
+    f1, f2, f3, f4, D = all_facts
+    assert (f1["arms"] - f1["clean_arms"]) / f1["arms"] > 1 / 3                  # "Over a third"
+    assert 2 * f4["guards"]["flat_with_worse"] == f4["up"]["do not launch"]      # "half of the 20"
+    assert f4["guards"]["flat_with_worse"] == 10
+    small = b["arms"][b["arms"].split == "small imbalance"]
+    worst = small.loc[small.users_short.idxmax()]                                # the largest shortfall
+    assert f"(a treatment share of {100 * worst.treatment_share:.3f}%)" in SUMMARY
+    assert ((small.treatment_share - 0.5).abs() < 0.001).all()                   # "within a tenth of a point"
+    case = f4["cases"]["jump"]
+    assert case["row"].verdict == "check the data"
+    jump = f3["end_jumps"].iloc[0]
+    assert f"`{jump.experiment_id}` / {jump.variant_id}" == f"`{case['row'].experiment_id}` / {case['row'].variant_id}"
+    assert D.PRIMARY == 1 and D.MARGIN == 0.01
+
+
+def test_no_summary_figure_is_new():
+    """The summary reports Parts 1 to 4; every number in it must already appear below it."""
+    numbers = set(re.findall(r"(?<![\w.])\d+(?:,\d{3})*(?:\.\d+)?%?", SUMMARY))
+    absent = sorted(n for n in numbers if n not in BODY)
+    assert not absent, absent
+
+
+def test_recommendations_table():
+    rows = [r for r in section("### What a team should take from it", "What this analysis cannot do").splitlines()
+            if re.match(r"\| \d+ \|", r)]
+    assert [int(r.split("|")[1]) for r in rows] == list(range(1, 8))
+    for r in rows:
+        evidence = r.rstrip(" |").split("|")[-1]
+        assert re.search(r"Part [1-4]", evidence), r
+    assert "[Limits](#limits)" in README and "\n## Limits\n" in README
